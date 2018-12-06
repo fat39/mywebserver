@@ -2,7 +2,10 @@
 
 from core.main import Snow,HttpResponse
 
-def index():
+def index(request):
+    print(request.url)
+    print(request.headers_bytes)
+    print(request.body_bytes)
     return HttpResponse("index ok")
 
 

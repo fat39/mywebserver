@@ -6,9 +6,19 @@ import re
 class HttpRequest():
     def __init__(self, conn):
         self.conn = conn
+        self.headers_dict = dict()
         self.headers_bytes = bytes("", encoding="utf-8")
         self.body_bytes = bytes("", encoding="utf-8")
+        self.method = ""
+        self.url = ""
+        self.version = ""
+
         self.initial()
+        self.initial_headers()
+
+    @property
+    def headers_str(self):
+        return str(self.headers_bytes, encoding="utf-8")
 
     def initial(self):
         # 接收数据get/post
@@ -28,6 +38,17 @@ class HttpRequest():
                     self.headers_bytes, self.body_bytes = self.headers_bytes.split(b"\r\n\r\n", 1)
                     split_flag = True
 
+    def initial_headers(self):
+        header_lines = self.headers_str.split("\r\n")
+        first_line = header_lines[0].split()
+        if len(first_line) == 3:
+            self.method, self.url, self.version = first_line
+
+            for header_line in header_lines:
+                kv = header_line.split(":",1)
+                if len(kv) == 2:
+                    k, v = kv
+                    self.headers_dict[k] = v
 
 
 class HttpResponse():
@@ -42,11 +63,18 @@ class HttpResponse():
         ),encoding="utf-8")
 
 
+class HttpNotFound(HttpResponse):
+
+    def __init__(self):
+        super(HttpNotFound, self).__init__('404 Not Found')
+
+
 class Snow():
 
     def __init__(self,router):
         self.router = router
         self.inputs = set()
+
 
     def run(self, ip="localhost", port=9999):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -70,19 +98,22 @@ class Snow():
                     response = self.process(conn)
                     if isinstance(response,HttpResponse):
                         conn.sendall(response.response())
+                    else:
+                        # 可以做其他操作
+                        pass
                     self.inputs.remove(conn)
 
     def process(self,conn):
-        request = HttpRequest(conn)
-        header_line1 = str(request.headers_bytes.split(b"\r\n",1)[0],encoding="utf-8")
-        method,url,version = header_line1.split()
+        self.request = HttpRequest(conn)
         func = None
-        for kv in self.router:
-            if len(kv) == 2:
-                re_url = kv[0]
-                if re.match(re_url,url):
-                    func = kv[1]
+        for route in self.router:
+            if len(route) == 2:
+                if re.match(route[0],self.request.url):
+                    func = route[1]
                     break
         if func:
-            return func()
+            return func(self.request)
+        else:
+            return HttpNotFound()
+
 
