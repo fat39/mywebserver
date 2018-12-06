@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 import socket
 import select
-
+import re
 
 class HttpRequest():
     def __init__(self, conn):
@@ -29,17 +29,23 @@ class HttpRequest():
                     split_flag = True
 
 
+
 class HttpResponse():
     def __init__(self, content=""):
         self.content = content
+        self.template = "HTTP/1.1 200 OK\r\nContent-Length: {len}\r\n\r\n{body}"
 
     def response(self):
-        return bytes(self.content,encoding="utf-8")
+        return bytes(self.template.format(
+            len=len(self.content),
+            body=self.content,
+        ),encoding="utf-8")
 
 
 class Snow():
 
-    def __init__(self):
+    def __init__(self,router):
+        self.router = router
         self.inputs = set()
 
     def run(self, ip="localhost", port=9999):
@@ -62,11 +68,21 @@ class Snow():
                 else:
                     # 把“接收数据get/post”这个封装到request里
                     response = self.process(conn)
-                    conn.sendall(response.response())
+                    if isinstance(response,HttpResponse):
+                        conn.sendall(response.response())
                     self.inputs.remove(conn)
 
     def process(self,conn):
         request = HttpRequest(conn)
-        res = HttpResponse("HTTP/1.1 200 OK\r\nContent-Length: {len}\r\n\r\n{body}".format(len=len("hello world"), body="hello world"))
-        return res
+        header_line1 = str(request.headers_bytes.split(b"\r\n",1)[0],encoding="utf-8")
+        method,url,version = header_line1.split()
+        func = None
+        for kv in self.router:
+            if len(kv) == 2:
+                re_url = kv[0]
+                if re.match(re_url,url):
+                    func = kv[1]
+                    break
+        if func:
+            return func()
 
