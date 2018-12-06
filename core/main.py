@@ -6,21 +6,27 @@ import select
 class HttpRequest():
     def __init__(self, conn):
         self.conn = conn
-        self.raw_bytes = bytes("", encoding="utf-8")
         self.headers_bytes = bytes("", encoding="utf-8")
         self.body_bytes = bytes("", encoding="utf-8")
         self.initial()
 
     def initial(self):
         # 接收数据get/post
+        split_flag = False
         while True:
             try:
-                _recv = self.conn.recv(8096)
-                self.raw_bytes += _recv
+                _recv_bytes = self.conn.recv(8096)
             except:
-                # 循环收齐数据后，由于set blocking(False)，所以出发except
+                # 循环收齐数据后，由于setblocking(False)，所以触发except
                 break
-        self.headers_bytes, self.body_bytes = self.raw_bytes.split(bytes("\r\n\r\n", encoding="utf-8"))
+
+            if split_flag:
+                self.body_bytes += _recv_bytes
+            else:
+                self.headers_bytes += _recv_bytes
+                if b"\r\n\r\n" in self.headers_bytes:
+                    self.headers_bytes, self.body_bytes = self.headers_bytes.split(b"\r\n\r\n", 1)
+                    split_flag = True
 
 
 class HttpResponse():
@@ -28,7 +34,7 @@ class HttpResponse():
         self.content = content
 
     def response(self):
-        return self.content
+        return bytes(self.content,encoding="utf-8")
 
 
 class Snow():
@@ -54,13 +60,13 @@ class Snow():
                     client.setblocking(False)
                     self.inputs.add(client)
                 else:
-                    # 接收数据get/post
-                    request = self.process(conn)
-                    print(request.raw_bytes)
-                    conn.sendall(bytes("HTTP/1.1 200 OK\r\nContent-Length: {len}\r\n\r\n{body}".format(len=len("hello world"),body="hello world"), encoding="utf-8"))
+                    # 把“接收数据get/post”这个封装到request里
+                    response = self.process(conn)
+                    conn.sendall(response.response())
                     self.inputs.remove(conn)
 
     def process(self,conn):
         request = HttpRequest(conn)
-        return request
+        res = HttpResponse("HTTP/1.1 200 OK\r\nContent-Length: {len}\r\n\r\n{body}".format(len=len("hello world"), body="hello world"))
+        return res
 
