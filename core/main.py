@@ -98,10 +98,12 @@ class Snow():
                     response = self.process(conn)
                     if isinstance(response,HttpResponse):
                         conn.sendall(response.response())
+                        self.inputs.remove(conn)
+                        conn.close()
                     else:
                         # 可以做其他操作
                         pass
-                    self.inputs.remove(conn)
+
 
     def process(self,conn):
         self.request = HttpRequest(conn)
